@@ -1,0 +1,174 @@
+using Microsoft.AspNetCore.Mvc;
+using Microsoft.EntityFrameworkCore;
+using CerealApi.Models;
+using CerealApi.CsvParser;
+using System.IO;
+using System.Threading.Tasks;
+
+public static class CerealEndpoints
+{
+    public static void MapCerealEndpoints(this WebApplication app)
+    {
+        app.MapGet("/cereal", GetCereals).RequireAuthorization();
+        app.MapGet("/cereal/{id}", GetCerealById);
+        app.MapGet("/cereal/query/{query}", QueryCereals);
+        app.MapGet("/cereal/image/{id}", GetCerealImage);
+        app.MapPost("/cereal", AddCereal).RequireAuthorization();
+        app.MapPut("/cereal/{id}", UpdateCereal).RequireAuthorization();
+        app.MapDelete("/cereal/{id}", DeleteCereal).RequireAuthorization();
+        app.MapDelete("/cereal", DeleteAllCereals).RequireAuthorization();
+        app.MapPost("/cereal/{csvPath}", ParseCsv).RequireAuthorization();
+    }
+
+    private static async Task<IResult> GetCereals(CerealDb db)
+    {
+        try
+        {
+            return Results.Ok(await db.Cereals.ToListAsync());
+        }
+        catch (Exception ex)
+        {
+            return Results.Problem($"Error occurred while retrieving cereals: {ex.Message}");
+        }
+    }
+
+    private static async Task<IResult> GetCerealById(CerealDb db, int id)
+    {
+        try
+        {
+            var cereal = await db.Cereals.FindAsync(id);
+            return cereal != null ? Results.Ok(cereal) : Results.NotFound();
+        }
+        catch (Exception ex)
+        {
+            return Results.Problem($"Error occurred while retrieving cereal: {ex.Message}");
+        }
+    }
+
+    private static async Task<IResult> QueryCereals(CerealDb db, string query)
+    {
+        try
+        {
+            var cereals = await db.Cereals.Where(query).ToListAsync();
+            return cereals.Count != 0 ? Results.Ok(cereals) : Results.NotFound();
+        }
+        catch (Exception ex)
+        {
+            return Results.BadRequest($"Invalid query: {ex.Message}");
+        }
+    }
+
+    private static async Task<IResult> GetCerealImage(CerealDb db, int id)
+    {
+        try
+        {
+            var cereal = await db.Cereals.FindAsync(id);
+            if (cereal == null || !File.Exists(cereal.Image))
+            {
+                return Results.NotFound();
+            }
+
+            var image = File.OpenRead(cereal.Image);
+            return Results.File(image, "image/jpeg");
+        }
+        catch (Exception ex)
+        {
+            return Results.Problem($"Error occurred while retrieving image: {ex.Message}");
+        }
+    }
+
+    private static async Task<IResult> AddCereal(CerealDb db, Cereal cereal)
+    {
+        try
+        {
+            await db.Cereals.AddAsync(cereal);
+            await db.SaveChangesAsync();
+            return Results.Created($"/cereal/{cereal.Id}", cereal);
+        }
+        catch (Exception ex)
+        {
+            return Results.Problem($"Error occurred while adding cereal: {ex.Message}");
+        }
+    }
+
+    private static async Task<IResult> UpdateCereal(CerealDb db, Cereal updatecereal, int id)
+    {
+        try
+        {
+            var cereal = await db.Cereals.FindAsync(id);
+            if (cereal is null)
+                return Results.NotFound();
+
+            cereal.Name = updatecereal.Name;
+            cereal.Mfr = updatecereal.Mfr;
+            cereal.Type = updatecereal.Type;
+            cereal.Calories = updatecereal.Calories;
+            cereal.Protein = updatecereal.Protein;
+            cereal.Fat = updatecereal.Fat;
+            cereal.Sodium = updatecereal.Sodium;
+            cereal.Fiber = updatecereal.Fiber;
+            cereal.Carbo = updatecereal.Carbo;
+            cereal.Sugar = updatecereal.Sugar;
+            cereal.Potass = updatecereal.Potass;
+            cereal.Vitamins = updatecereal.Vitamins;
+            cereal.Shelf = updatecereal.Shelf;
+            cereal.Weight = updatecereal.Weight;
+            cereal.Cups = updatecereal.Cups;
+            cereal.Rating = updatecereal.Rating;
+            cereal.Image = updatecereal.Image;
+
+            await db.SaveChangesAsync();
+            return Results.Ok(cereal);
+        }
+        catch (Exception ex)
+        {
+            return Results.Problem($"Error occurred while updating cereal: {ex.Message}");
+        }
+    }
+
+    private static async Task<IResult> DeleteCereal(CerealDb db, int id)
+    {
+        try
+        {
+            var cereal = await db.Cereals.FindAsync(id);
+            if (cereal is null)
+                return Results.NotFound();
+
+            db.Cereals.Remove(cereal);
+            await db.SaveChangesAsync();
+            return Results.Ok();
+        }
+        catch (Exception ex)
+        {
+            return Results.Problem($"Error occurred while deleting cereal: {ex.Message}");
+        }
+    }
+
+    private static async Task<IResult> DeleteAllCereals(CerealDb db)
+    {
+        try
+        {
+            var allCereals = await db.Cereals.ToListAsync();
+            db.Cereals.RemoveRange(allCereals);
+            await db.SaveChangesAsync();
+            return Results.NoContent();
+        }
+        catch (Exception ex)
+        {
+            return Results.Problem($"Error occurred while deleting cereals: {ex.Message}");
+        }
+    }
+
+    private static async Task<IResult> ParseCsv(CerealDb db, ICsvParser csvParser, string csvPath)
+    {
+        try
+        {
+            await csvParser.ParseCsvAsync(db, csvPath);
+            return Results.Ok();
+        }
+        catch (Exception ex)
+        {
+            return Results.Problem("An error occurred while parsing the CSV.");
+        }
+    }
+}

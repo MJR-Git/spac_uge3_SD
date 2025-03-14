@@ -3,6 +3,7 @@ using System;
 using CerealApi.Models;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 
 #nullable disable
@@ -10,9 +11,11 @@ using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 namespace CerealApi.Migrations
 {
     [DbContext(typeof(CerealDb))]
-    partial class CerealDbModelSnapshot : ModelSnapshot
+    [Migration("20250314120317_newVersion")]
+    partial class newVersion
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder.HasAnnotation("ProductVersion", "9.0.3");
@@ -23,59 +26,55 @@ namespace CerealApi.Migrations
                         .ValueGeneratedOnAdd()
                         .HasColumnType("INTEGER");
 
-                    b.Property<int>("Calories")
+                    b.Property<int?>("Calories")
                         .HasColumnType("INTEGER");
 
-                    b.Property<float>("Carbo")
+                    b.Property<float?>("Carbo")
                         .HasColumnType("REAL");
 
-                    b.Property<float>("Cups")
+                    b.Property<float?>("Cups")
                         .HasColumnType("REAL");
 
-                    b.Property<int>("Fat")
+                    b.Property<int?>("Fat")
                         .HasColumnType("INTEGER");
 
-                    b.Property<float>("Fiber")
+                    b.Property<float?>("Fiber")
                         .HasColumnType("REAL");
 
                     b.Property<string>("Image")
-                        .IsRequired()
                         .HasColumnType("TEXT");
 
                     b.Property<string>("Mfr")
-                        .IsRequired()
                         .HasColumnType("TEXT");
 
                     b.Property<string>("Name")
-                        .IsRequired()
                         .HasColumnType("TEXT");
 
-                    b.Property<int>("Potass")
+                    b.Property<int?>("Potass")
                         .HasColumnType("INTEGER");
 
-                    b.Property<int>("Protein")
+                    b.Property<int?>("Protein")
                         .HasColumnType("INTEGER");
 
-                    b.Property<float>("Rating")
+                    b.Property<float?>("Rating")
                         .HasColumnType("REAL");
 
-                    b.Property<int>("Shelf")
+                    b.Property<int?>("Shelf")
                         .HasColumnType("INTEGER");
 
-                    b.Property<int>("Sodium")
+                    b.Property<int?>("Sodium")
                         .HasColumnType("INTEGER");
 
-                    b.Property<int>("Sugar")
+                    b.Property<int?>("Sugar")
                         .HasColumnType("INTEGER");
 
                     b.Property<string>("Type")
-                        .IsRequired()
                         .HasColumnType("TEXT");
 
-                    b.Property<int>("Vitamins")
+                    b.Property<int?>("Vitamins")
                         .HasColumnType("INTEGER");
 
-                    b.Property<float>("Weight")
+                    b.Property<float?>("Weight")
                         .HasColumnType("REAL");
 
                     b.HasKey("Id");

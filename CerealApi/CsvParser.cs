@@ -1,8 +1,10 @@
 using CerealApi.Models;
 
+/*This class is responsible for parsing the CSV file and adding the data to the database.
+It will also search the "CerealPictures* directory and add a picture to the cereal class if a image with the same name exists*/
+
 namespace CerealApi.CsvParser
 {
-
     public interface ICsvParser
     {
         Task ParseCsvAsync(CerealDb db, string csvPath);
@@ -12,7 +14,8 @@ namespace CerealApi.CsvParser
     {
         public async Task ParseCsvAsync(CerealDb db, string csvPath)
         {
-        // Read the lines from the CSV file, skipping the 2 header lines.
+            /* I use a try-catch block and try to open the csv file, 
+            split it into lines and then fields to extract the values and make a cereal object.*/
             try
             {
                 using StreamReader reader = new StreamReader(csvPath);
@@ -21,6 +24,7 @@ namespace CerealApi.CsvParser
 
                 int idCounter = 1;
 
+                //I use Range expression to skip the first two lines of headers.
                 foreach (string line in lines[2..^1])
                 {
             
@@ -52,14 +56,16 @@ namespace CerealApi.CsvParser
 
                 await db.SaveChangesAsync(); 
             }
-            catch (Exception e)
+            catch (Exception ex)
             {
-                Console.WriteLine($"Error reading CSV file: {e.Message}");
-                throw;
+                Results.Problem($"An error occurred while parsing the CSV: {ex.Message}");
             }; 
         }
 
-        private string GetCerealImage(string cerealName)
+
+        /*This method will search the "CerealPictures" directory 
+        for a picture with the same name as the cereal and return the path*/
+        private static string GetCerealImage(string cerealName)
         {   
             foreach (char c in Path.GetInvalidFileNameChars())
             {

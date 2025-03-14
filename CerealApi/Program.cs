@@ -4,9 +4,17 @@ using Microsoft.OpenApi.Models;
 using CerealApi.CsvParser;
 using CerealApi.Models;
 using System.Linq.Dynamic.Core;
+using Microsoft.AspNetCore.Identity;
+using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.IdentityModel.Tokens;
+using System.Text;
+using System.IdentityModel.Tokens.Jwt;
+using System.Security.Claims;
 
 var builder = WebApplication.CreateBuilder(args);
 var connectionString = builder.Configuration.GetConnectionString("Cereals") ?? "Data Source=Cereals.db";
+var configuration = builder.Configuration;
+var jwtSettings = configuration.GetSection("Jwt");
 
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSqlite<CerealDb>(connectionString);
@@ -16,13 +24,71 @@ builder.Services.AddSwaggerGen(c =>
        Title = "Cereal API", 
        Description = "Cereal database", 
        Version = "v1" });
+
+    c.AddSecurityDefinition("Bearer", new OpenApiSecurityScheme
+    {
+        Description = "JWT Authorization header using the Bearer scheme. Example: \"Authorization: Bearer {token}\"",
+        Name = "Authorization",
+        In = ParameterLocation.Header,
+        Type = SecuritySchemeType.ApiKey,
+        Scheme = "Bearer"
+    });
+
+    c.AddSecurityRequirement(new OpenApiSecurityRequirement
+    {
+        {
+            new OpenApiSecurityScheme
+            {
+                Reference = new OpenApiReference
+                {
+                    Type = ReferenceType.SecurityScheme,
+                    Id = "Bearer"
+                }
+            },
+            new string[] {}
+        }
+    });
 });
 
-builder.Services.AddAuthorizationBuilder()
-  .AddPolicy("admin_greetings", policy =>
-        policy
-            .RequireRole("admin")
-            .RequireClaim("scope", "greetings_api"));
+builder.Services.AddIdentity<IdentityUser, IdentityRole>(options =>
+{
+    options.Password.RequireDigit = true;
+    options.Password.RequireLowercase = true;
+    options.Password.RequireUppercase = true;
+    options.Password.RequireNonAlphanumeric = true;
+    options.Password.RequiredLength = 8;
+    options.Password.RequiredUniqueChars = 1;    
+})
+    .AddEntityFrameworkStores<CerealDb>()
+    .AddDefaultTokenProviders();
+
+builder.Services.AddAuthentication(options =>
+{
+    options.DefaultAuthenticateScheme = JwtBearerDefaults.AuthenticationScheme;
+    options.DefaultChallengeScheme = JwtBearerDefaults.AuthenticationScheme;
+})
+.AddJwtBearer(options =>
+{
+    options.TokenValidationParameters = new TokenValidationParameters
+    {
+        ValidateIssuerSigningKey = true,
+        IssuerSigningKey = new SymmetricSecurityKey(Encoding.ASCII.GetBytes(jwtSettings["Key"])),
+        ValidateIssuer = false,
+        ValidateAudience = false
+    };
+});
+
+builder.Services.AddAuthorization();
+
+builder.Services.AddCors(options =>
+{
+    options.AddPolicy("AllowAll", builder =>
+    {
+        builder.AllowAnyOrigin()
+               .AllowAnyMethod()
+               .AllowAnyHeader();
+    });
+});
 
 builder.Services.AddScoped<ICsvParser, CsvParser>();
 
@@ -37,6 +103,12 @@ if (app.Environment.IsDevelopment())
    });
 }
 
+// Here I activate authentication and authorization.
+app.UseAuthentication();
+app.UseAuthorization();
+
+/* The MapGet functions allows the client to retrieve data from the server, based on id, query, 
+or just a list of all the cereals. The client can also retrieve  an image based on the id.*/
 app.MapGet("/", () => "Cereal database");
 app.MapGet("/cereal", async (CerealDb db) =>
 {
@@ -48,7 +120,7 @@ app.MapGet("/cereal", async (CerealDb db) =>
     {
         return Results.Problem($"Error ocurred while retrieving cereals: {ex.Message}");
     }
-});;
+}).RequireAuthorization();
 app.MapGet("/cereal/{id}", async (CerealDb db, int id) =>
 {
     try
@@ -92,6 +164,8 @@ app.MapGet("/cereal/image/{id}", async (CerealDb db, int id) =>
     }
 });
 
+/* The MapPost functions allows the client to add a new cereal to the database, 
+or to parse a CSV file and add the cereals to the database. They both require authentication*/
 app.MapPost("/cereal", async (CerealDb db, Cereal cereal) =>
 {
     try
@@ -104,7 +178,21 @@ app.MapPost("/cereal", async (CerealDb db, Cereal cereal) =>
     {
         return Results.Problem($"Error ocurred while adding cereal: {ex.Message}");
     }
-});
+}).RequireAuthorization();
+app.MapPost("/cereal/{csvPath}", async (CerealDb db, ICsvParser csvParser, string csvPath) =>
+{
+    try
+    {
+        await csvParser.ParseCsvAsync(db, csvPath);
+        return Results.Ok();
+    }
+    catch (Exception ex)
+    {
+        return Results.Problem($"An error occurred while parsing the CSV: {ex.Message}");
+    };
+}).RequireAuthorization();
+
+// MapPut functions allow the client to update a cereal based on id. Requires authentication.
 app.MapPut("/cereal/{id}", async (CerealDb db, Cereal updatecereal, int id) => 
 {
     try
@@ -138,7 +226,9 @@ app.MapPut("/cereal/{id}", async (CerealDb db, Cereal updatecereal, int id) =>
     {
         return Results.Problem($"Error ocurred while updating cereal: {ex.Message}");
     }
-});
+}).RequireAuthorization();
+
+// MapDelete functions allow the client to delete all cereals or a cereal based on id. Requires authentication
 app.MapDelete("/cereal/{id}", async (CerealDb db, int id) => 
 {
     try
@@ -155,7 +245,7 @@ app.MapDelete("/cereal/{id}", async (CerealDb db, int id) =>
     {
         return Results.Problem($"Error ocurred while deleting cereal: {ex.Message}");
     }
-});
+}).RequireAuthorization();
 app.MapDelete("/cereal", async (CerealDb db) =>
 {
     try
@@ -169,17 +259,38 @@ app.MapDelete("/cereal", async (CerealDb db) =>
     {
         return Results.Problem($"Error ocurred while deleting cereals: {ex.Message}");
     }
-});
-app.MapPost("/cereal/{csvPath}", async (CerealDb db, ICsvParser csvParser, string csvPath) =>
+}).RequireAuthorization();
+
+// These endpoints are used for user registration and login.
+app.MapPost("/register", async (UserManager<IdentityUser> userManager, string username, string password) =>
 {
-    try
+    var user = new IdentityUser { UserName = username };
+    var result = await userManager.CreateAsync(user, password);
+    if (result.Succeeded)
     {
-        await csvParser.ParseCsvAsync(db, csvPath);
         return Results.Ok();
     }
-    catch (Exception ex)
-    {
-        return Results.Problem("An error occurred while parsing the CSV.");
-    };
+    return Results.BadRequest(result.Errors);
 });
+app.MapPost("/login", async (UserManager<IdentityUser> userManager, SignInManager<IdentityUser> signInManager, string username, string password) =>
+{
+    var result = await signInManager.PasswordSignInAsync(username, password, false, false);
+    if (result.Succeeded)
+    {
+        var user = await userManager.FindByNameAsync(username);
+        var tokenHandler = new JwtSecurityTokenHandler();
+        var key = Encoding.ASCII.GetBytes(jwtSettings["key"]);
+        var tokenDescriptor = new SecurityTokenDescriptor
+        {
+            Subject = new ClaimsIdentity(new[] { new Claim("id", user.Id) }),
+            Expires = DateTime.UtcNow.AddDays(7),
+            SigningCredentials = new SigningCredentials(new SymmetricSecurityKey(key), SecurityAlgorithms.HmacSha256Signature)
+        };
+        var token = tokenHandler.CreateToken(tokenDescriptor);
+        var tokenString = tokenHandler.WriteToken(token);
+        return Results.Ok(new { Token = tokenString });
+    }
+    return Results.Unauthorized();
+});
+
 app.Run();
